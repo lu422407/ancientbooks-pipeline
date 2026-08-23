@@ -1,6 +1,6 @@
 {
   "manifest_version": "0.1.0",
-  "updated_at": "2026-08-23T03:39:21.165420+00:00",
+  "updated_at": "2026-08-23T04:00:54.899127+00:00",
   "records": {
     "濒湖脉学::1::R": {
       "book": "濒湖脉学",
@@ -61,6 +61,66 @@
       "confidence": 0.0,
       "created_at": "2026-08-23T03:39:21.165420+00:00",
       "updated_at": "2026-08-23T03:39:21.165420+00:00"
+    },
+    "王叔和脉经01::1::whole": {
+      "book": "王叔和脉经01",
+      "volume": "卷一",
+      "leaf": 1,
+      "pdf_page": 1,
+      "side": "whole",
+      "pdf_path": "Z:\\中医和古书\\古书\\《王叔和脉经》01.pdf",
+      "image_file": "H:\\PDFgushu\\ancientbooks-pipeline\\data\\sources\\images\\王叔和脉经01\\王叔和脉经01_ppdf0001_whole.jpg",
+      "image_hash": "4895df2315cc28e513c115f1eda46147a159d1bb160f2a0af21337d01970fe01",
+      "ocr_engine": "rapidocr",
+      "ocr_version": "rapidocr-v5",
+      "pipeline_version": "0.1.0",
+      "raw_ocr_path": null,
+      "structured_ocr_path": null,
+      "markdown_path": null,
+      "review_status": "pending",
+      "confidence": 0.0,
+      "created_at": "2026-08-23T04:00:54.864580+00:00",
+      "updated_at": "2026-08-23T04:00:54.870849+00:00"
+    },
+    "王叔和脉经01::2::whole": {
+      "book": "王叔和脉经01",
+      "volume": "卷一",
+      "leaf": 2,
+      "pdf_page": 2,
+      "side": "whole",
+      "pdf_path": "Z:\\中医和古书\\古书\\《王叔和脉经》01.pdf",
+      "image_file": "H:\\PDFgushu\\ancientbooks-pipeline\\data\\sources\\images\\王叔和脉经01\\王叔和脉经01_ppdf0002_whole.jpg",
+      "image_hash": "2a8e8c7fd1c092a593c1c085243a4e32e0e111fb120cab99e26dca9f0b765349",
+      "ocr_engine": "rapidocr",
+      "ocr_version": "rapidocr-v5",
+      "pipeline_version": "0.1.0",
+      "raw_ocr_path": null,
+      "structured_ocr_path": null,
+      "markdown_path": null,
+      "review_status": "pending",
+      "confidence": 0.0,
+      "created_at": "2026-08-23T04:00:54.897592+00:00",
+      "updated_at": "2026-08-23T04:00:54.899127+00:00"
+    },
+    "王叔和脉经01::3::whole": {
+      "book": "王叔和脉经01",
+      "volume": "卷一",
+      "leaf": 3,
+      "pdf_page": 3,
+      "side": "whole",
+      "pdf_path": "Z:\\中医和古书\\古书\\《王叔和脉经》01.pdf",
+      "image_file": "H:\\PDFgushu\\ancientbooks-pipeline\\data\\sources\\images\\王叔和脉经01\\王叔和脉经01_ppdf0003_whole.jpg",
+      "image_hash": "21a4163a056dd21c7a7fca2e1e80469dca556710b77976b8115c57b41d28a126",
+      "ocr_engine": "rapidocr",
+      "ocr_version": "rapidocr-v5",
+      "pipeline_version": "0.1.0",
+      "raw_ocr_path": null,
+      "structured_ocr_path": null,
+      "markdown_path": null,
+      "review_status": "pending",
+      "confidence": 0.0,
+      "created_at": "2026-08-23T04:00:54.899127+00:00",
+      "updated_at": "2026-08-23T04:00:54.899127+00:00"
     }
   }
 }
