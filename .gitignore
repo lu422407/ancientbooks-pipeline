@@ -1,0 +1,29 @@
+# ===== AncientBooks Pipeline .gitignore =====
+# 原则：只跟踪「代码 + 可复现的知识产物」，排除派生的重二进制。
+
+# --- 派生的页面图像（由 ancientbook ingest 从 PDF 重建，约 77MB/20页）---
+data/sources/images/
+
+# --- 原始 PDF 不进仓库（只读盘原件是 Evidence Source，不在工作目录复制）---
+data/sources/pdf/
+
+# --- 临时预览 / 日志 ---
+_preview/
+*.log
+_ocr_batch.log
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# --- OS / 编辑器 ---
+.DS_Store
+.idea/
+.vscode/
+*.swp

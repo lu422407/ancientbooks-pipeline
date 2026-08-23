@@ -1,0 +1,50 @@
+# POC 評估報告 — 《《标注传习录》卷一》
+
+生成時間：2026-08-23
+
+## 1. 樣本
+- 書名：《标注传习录》卷一
+- 卷：卷一
+- PDF 總頁數：91
+- POC 葉數：**20**（PDF 前 10 個 spread，含封面 / 書名葉 / 目錄葉 / 正文起始）
+
+## 2. Pipeline 階段
+- ✅ ingest: PyMuPDF 200 dpi 渲染，自動拆分 spread 為 R/L 兩葉，計算 sha256
+- ✅ layout: 從 OCR 框推斷 orientation/reading_direction/columns
+- ✅ OCR: RapidOCR(high) = ch_PP-OCRv4_rec_server
+- ✅ structure: 閱讀順序（垂直右→左）、正文/注分層
+- ✅ export: Canonical Markdown 含完整 provenance
+- ✅ review_queue: 按 confidence 排序、可配閾值
+- ✅ manifest: image_hash + ocr_version + pipeline_version 控管冪等
+- ✅ 一個真實 Knowledge Node 樣本（概念：傳習錄；人物：王陽明；方法：知行合一）
+
+## 3. 已知 OCR 識別錯誤樣本
+| 原字 | 識別結果 | 原因 |
+|---|---|---|
+| 傳 | 傅（葉3目錄） | 部首誤識 |
+| 楊[明]山 | 楊[明]山 → 楊山 | 漏字（陰影 / 刻蝕） |
+| 竑 | 琊 / 焦琊 | 形近誤識 |
+| 積 | 猜（葉4刊記） | 形近誤識 |
+| 浪華 | 浪华 | 繁簡混用輸出（古籍本就是繁體，但偶爾輸出簡體） |
+
+## 4. Pipeline 優點
+- 每葉獨立子進程，記憶體可控
+- Raw + Structured 兩份 JSON 完整保存，絕不覆蓋
+- 閾值可調（commentary_height_ratio / high_priority_threshold / review_threshold）
+- 重新運行時自動跳過已處理葉（image_hash + ocr_version + pipeline_version 比對）
+
+## 5. 已知失敗案例 / 限制
+- 封面葉 / 校色卡葉 detection 框太少（< 3 個 block），導致 layout profile 不準確（被列為 review 優先級）
+- title page 大字（傳習錄 三字）獨立塊極少，detection 偶爾合併錯誤
+- Commentary 分類基於字高啟發式，若古籍同時使用雙行小注且字號接近（<0.72 ratio）會誤判
+- LLM 完全未參與原文校勘（符合「LLM 不偷當校勘者」原則）
+- 異體字未做專門處理（保留 OCR 輸出原貌）
+- 頁碼 detection 尚未實作（frontmatter 中 pdf_page 已記錄，但未自動從頁面中 OCR 頁碼）
+- Reading order 在「欄內兩列註文」場景尚未專門處理（古籍罕見）
+
+## 6. 下一階段建議
+- Phase 8-9: Knowledge Node 自動抽取（從正文塊 N-gram + 字典匹配候選概念；候選 → 人工確認）
+- 引入異體字字典（保留原字 + 標注正字 + 連結）
+- 頁碼自動偵測（基於頁面底部小字 + 數字模式）
+- 跨書概念關聯圖（以 [[概念名]] 雙鏈接為索引層）
+- RAG：建立 canonical markdown 全文 + Knowledge Node 雙索引（BM25 + 語義）

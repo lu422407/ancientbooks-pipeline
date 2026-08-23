@@ -1,0 +1,58 @@
+{
+  "book": "《标注传习录》卷一",
+  "leaf": 9,
+  "side": "R",
+  "pdf_page": 5,
+  "image_file": "/Users/luapple/Documents/AncientBooks/data/sources/images/标注传习录卷一/标注传习录卷一_ppdf0005_R.png",
+  "image_hash": "21db48ec95967134cee7b35fa1a60f4ac870cb649bb08695ccb6c77823b6fa61",
+  "ocr_engine": "RapidOCR(high)/rapidocr_ch_server_v4",
+  "layout": {
+    "orientation": "vertical",
+    "reading_direction": "right_to_left",
+    "column_count": 1,
+    "avg_main_height": 3591.5322265625,
+    "avg_commentary_height": 1597.9839477539062,
+    "column_x_centers": [
+      2436.7020416259766
+    ],
+    "main_text_region": [
+      [
+        1378.723388671875,
+        612.0968017578125
+      ],
+      [
+        3248.13818359375,
+        612.0968017578125
+      ],
+      [
+        3248.13818359375,
+        4412.9033203125
+      ],
+      [
+        1378.723388671875,
+        4412.9033203125
+      ]
+    ],
+    "annotation_regions": [
+      [
+        [
+          1692.287109375,
+          795.9677734375
+        ],
+        [
+          3396.54248046875,
+          795.9677734375
+        ],
+        [
+          3396.54248046875,
+          2898.38720703125
+        ],
+        [
+          1692.287109375,
+          2898.38720703125
+        ]
+      ]
+    ]
+  },
+  "raw_path": "/Users/luapple/Documents/AncientBooks/data/ocr/raw/标注传习录卷一/《标注传习录》卷一_leaf0009_R_raw.json"
+}
