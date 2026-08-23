@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, List, Tuple, Union
 
+import os
+
 import numpy as np
 from PIL import Image
 
@@ -37,21 +39,45 @@ class RapidOCREngine(OCREngine):
             return
         from rapidocr import LangDet, LangRec, ModelType, OCRVersion, RapidOCR
 
-        if self.quality == "high":
-            rec_lang, rec_model = LangRec.CH, ModelType.SERVER
+        base = {
+            "Det.lang_type": LangDet.CH,
+            "Det.ocr_version": OCRVersion.PPOCRV6,
+        }
+        if self.quality == "v5":
+            # PP-OCRv5 server 主模型原生繁简一体（含拼音/和刻），古籍首选
+            rec_lang, rec_model, rec_ver = LangRec.CH, ModelType.SERVER, OCRVersion.PPOCRV5
+            det_type = ModelType.SERVER
+            version = "rapidocr_ch_server_v5"
+        elif self.quality == "high":
+            # 旧配置：v4 简体 server。馆藏为繁体，仅留作基线对比
+            rec_lang, rec_model, rec_ver = LangRec.CH, ModelType.SERVER, OCRVersion.PPOCRV4
+            det_type = ModelType.SMALL
             version = "rapidocr_ch_server_v4"
-        else:
-            rec_lang, rec_model = LangRec.CHINESE_CHT, ModelType.MOBILE
+        else:  # mobile
+            rec_lang, rec_model, rec_ver = LangRec.CHINESE_CHT, ModelType.MOBILE, OCRVersion.PPOCRV4
+            det_type = ModelType.SMALL
             version = "rapidocr_cht_mobile_v4"
         self._version = version
-        self._engine = RapidOCR(params={
-            "Det.lang_type": LangDet.CH,
-            "Det.model_type": ModelType.SMALL,
-            "Det.ocr_version": OCRVersion.PPOCRV6,
+        params = {
+            **base,
+            "Det.model_type": det_type,
             "Rec.lang_type": rec_lang,
             "Rec.model_type": rec_model,
-            "Rec.ocr_version": OCRVersion.PPOCRV4,
-        })
+            "Rec.ocr_version": rec_ver,
+        }
+        # 温控：由 run_batch.py 等通过环境变量限制 ONNX 线程数
+        threads = os.environ.get("ANCIENTBOOK_ONNX_THREADS")
+        if threads and threads.isdigit():
+            params["EngineConfig.onnxruntime.intra_op_num_threads"] = int(threads)
+        try:
+            self._engine = RapidOCR(params=params)
+        except Exception:
+            if self.quality != "v5" or det_type != ModelType.SERVER:
+                raise
+            # 部分 rapidocr 版本无 v6 server det 组合，回退 SMALL det
+            params["Det.model_type"] = ModelType.SMALL
+            self._version += "+det_small"
+            self._engine = RapidOCR(params=params)
 
     def version_info(self) -> str:
         self._init_engine()

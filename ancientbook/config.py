@@ -41,10 +41,17 @@ class PipelineConfig:
     project_root: Path = PROJECT_ROOT
 
     # image rendering
-    dpi: int = 200
+    dpi: int = 300  # 古籍笔画细，200 DPI 对识别偏低
+
+    # leaf image storage: 'png'(无损) | 'jpeg'(快约10倍，q95 对笔画影响可忽略)
+    image_format: str = "jpeg"
+    jpeg_quality: int = 95
 
     # OCR
-    ocr_quality: str = "high"  # 'high' -> PP-OCRv4 server (ch); 'mobile' -> cht mobile
+    # 'v5'     -> PP-OCRv5 server（繁简一体，精度首选，新默认）
+    # 'high'   -> PP-OCRv4 server 简体（旧配置，仅留作基线对比）
+    # 'mobile' -> PP-OCRv4 mobile 繁体(cht)
+    ocr_quality: str = "v5"
     ocr_engine: str = "rapidocr"
 
     # layout

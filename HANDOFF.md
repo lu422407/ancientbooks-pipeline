@@ -5,9 +5,10 @@
 
 ## 1. 项目现状
 
-- 本仓库 = `lu422407/ancientbooks-pipeline`，已完整克隆，**未做任何代码改动**。
+- 本仓库 = `lu422407/ancientbooks-pipeline`，`handoff` 分支。
+- **2026-08-23 已完成基础实施**（在旧笔记本上）：v5 模型档、中缝智能检测、JPEG 输出、温控 runner、评测工具、14 个单测全过、濒湖脉学小样 ingest 验证通过。剩余工作见 §7。
 - 管线能力：PDF → 拆叶图像 → RapidOCR → 版面/结构化 → Markdown + 人工复核队列，manifest 幂等可断点续跑。
-- 依赖未安装、数据未跑过。
+- 本机（笔记本）环境：仓库内 `.venv`（含 onnxruntime）；数据根 = 仓库目录。
 
 ## 2. 数据位置（重要）
 
@@ -28,19 +29,15 @@
 
 - **目标：精度优先，可以慢。全程离线优先（书页不上云）。**
 
-## 4. 代码审查发现的问题（按优先级）
+## 4. 代码审查发现的问题（✅=已修复，2026-08-23）
 
-1. **高精度档用错模型（最大精度损失）**
-   `ancientbook/ocr_adapter.py:40-45`：`quality="high"` 用 PP-OCRv4 **简体** server 识别模型，而馆藏全是繁体竖排 → 系统性错字。`mobile` 档反而是繁体（CHT）。
-2. **中缝居中硬切（永久性残字风险）**
-   `ancientbook/ingest.py:102`：`split_x = img.width // 2` 死取正中；`ingest.py:34` 的 `find_spread_split_column()` 写好了但主流程从未调用（它需要 OCR blocks，而 ingest 在 OCR 之前）。跨页扫描会被切进字里，后续 OCR 无法挽救。
-3. **每叶重载模型（一半时间在加载）**
-   `ancientbook/pipeline.py:92`：`run_ocr` 每次调 `build_ocr_engine()`；`_ocr_one.py` 每叶一个子进程。每叶付出 Python 启动 1~2s + 模型加载 2~5s，推理才 2~4s。子进程隔离本为绕 RapidOCR ~7MB/叶内存泄漏。
-4. **批处理脚本不可用**
-   `_ocr_batch.sh:3-4` 硬编码作者的 macOS 路径（`/Users/luapple/...`），Windows 跑不了。
-5. **ingest 存 PNG 又慢又重**
-   PNG 单线程 zlib 编码 1~3s/页 + 三重哈希（整页 bytes + 左右两半各 sha256_file 重读磁盘）。OCR 用途 JPEG(90) 快约 10 倍。
-6. 全库**无任何并行**，但在 10100 上也只需 1~2 worker，不必激进。
+1. ✅ **高精度档用错模型**：`ocr_adapter.py` 原 `high` 档用 PP-OCRv4 简体 server 识别繁体书。现已新增 `v5` 档（PP-OCRv5 server，繁简一体）并设为默认；旧 `high`/`mobile` 档保留作基线对比。
+2. ✅ **中缝居中硬切**：`ingest.py` 新增 `find_gutter_column()`——降采样像素墨迹密度找中央带空白谷底，带宽度校验（≥4% 页宽，避免把列间隙当中缝）；**找不到缝就不拆**（每页单半叶的扫描格式整页作一叶）。注意：实测 `濒湖脉学.pdf` 就是每页单半叶格式，页 1（封面）有宽空白会被拆 R/L，正文页整页保留。
+3. ✅ **每叶重载模型**：新增 `_ocr_chunk.py`（每 chunk 一进程、模型加载一次）+ `run_batch.py` 调度。
+4. ✅ **批处理脚本不可用**：`run_batch.py` 跨平台替代 macOS 专用 `_ocr_batch.sh`。
+5. ✅ **PNG 慢且三重哈希**：默认 JPEG(q95) 输出，删除了从未使用的整页哈希；DPI 默认 300。
+6. 已知小瑕疵：一本书内混有拆页和整页时叶编号会撞号（如 `2:L` 与 `2:whole` 并存）——manifest 键不冲突，仅编号不美观，后续可改为统一按 PDF 页计。
+7. 仍未做：全库无并行（在 10100 上也只需 1~2 worker，不急）。
 
 ## 5. 已定技术方案
 
@@ -87,13 +84,14 @@ JPEG(90) 替代 PNG；去掉重复哈希。
 ```bash
 git clone https://github.com/lu422407/ancientbooks-pipeline.git
 cd ancientbooks-pipeline
-git checkout handoff                 # 交接文档所在分支
+git checkout handoff                 # 交接分支
 python -m venv .venv && .venv\Scripts\activate
-pip install -e .                     # rapidocr 3.9+ / pymupdf，首次运行自动下模型
+pip install -e .                     # rapidocr[onnxruntime] / pymupdf，首次运行自动下模型
+pip install pytest                   # 跑测试用
 
 # Ollama（疑难页复核用）
 # 官网 https://ollama.com 装 Windows 版
-ollama pull qwen2.5vl:7b
+ollama pull qwen2.5vl:7b             # 记得 num_ctx 限制 4096！
 
 # 数据根指到仓库内（否则默认 ~/Documents/AncientBooks）
 setx ANCIENTBOOK_ROOT <仓库绝对路径>
@@ -102,19 +100,44 @@ setx ANCIENTBOOK_ROOT <仓库绝对路径>
 ls Z:/中医和古书
 ```
 
-## 7. 待办清单（按序执行）
+### 日常跑批（run_batch.py，温控友好）
+```bash
+python run_batch.py --book 濒湖脉学 --dry-run     # 查看待处理叶
+python run_batch.py --book 濒湖脉学                # v5 + 300DPI 默认档
+python run_batch.py --book X --cooldown 5         # 更保守散热（笔记本）
+python run_batch.py --book X --threads 4          # 台式机可放宽
+# 重跑安全：manifest 幂等，已完成叶自动 SKIP
 
-1. **评测基线（先做这个！）**：取 2 本书各 5 叶，跑「当前配置 vs v5+300DPI vs 再+预处理」三组，指标：平均置信度、低置信行率、互校分歧率 + 肉眼对比 HTML。没有基线的"更准"都是感觉。
-2. 换模型 + DPI300（§5.1），基线验证后固化。
-3. 修中缝切分（§5.2），先逐书抽查是否真需要拆页。
-4. 写跨平台 Python runner 替代 `_ocr_batch.sh`：单进程、模型复用、进程定期回收、（笔记本上）温控参数（§5.5）。
-5. ingest 改 JPEG（§5.6）。
-6. 双模型互校 + 分歧报告并入 review queue（§5.3）。
-7. Ollama Qwen2.5-VL 疑难页复核集成（§5.4），结果合入 review queue。
-8. 人工复核提效：叶面图像+文本对照的 HTML。
-9. （远期）注册 EvaHan 拿数据集、租 GPU LoRA 微调专属模型。
+# 评测基线（换任何模型/参数前后都先跑）
+python tools/eval_baseline.py --book 濒湖脉学 --leaves 3
+# 输出三配置对比 + data/reports/eval/<book>/*.md 逐行转储供肉眼比对
+```
+
+## 7. 待办清单（基础部分已完成，剩余如下）
+
+1. ~~评测基线~~（工具已就位：`tools/eval_baseline.py`；在 10100 上用真实古籍——《濒湖脉学》是现代排印本，代表性不足，建议再抽 `古书/` 里一两种刻本扫描对比）。
+2. ~~换模型 + DPI300 + 中缝修复 + runner + JPEG~~ ✅ 2026-08-23 完成。
+3. **全量初稿**：在 10100 上逐书 `ancientbook ingest`（Z: 直读）+ `run_batch.py`，夜间挂机。
+4. 双模型互校 + 分歧报告并入 review queue（§5.3，未实施）。
+5. Ollama Qwen2.5-VL 疑难页复核集成（§5.4，未实施），结果合入 review queue。
+6. 人工复核提效：叶面图像+文本对照的 HTML（未实施）。
+7. （远期）注册 EvaHan 拿数据集、租 GPU LoRA 微调专属模型。
 
 ## 8. 调研结论摘要（2026-08）
+
+### 首次评测基线（2026-08-23，濒湖脉学 3 叶，旧笔记本 2 线程）
+
+| 配置 | 平均置信度 | 低置信行(<0.80) | 耗时* |
+|---|---|---|---|
+| high（v4 简体 server，旧默认） | 0.9418 | 1/13 | 514s |
+| mobile（v4 繁体 mobile） | 0.9367 | 0/13 | 22s |
+| **v5（PP-OCRv5 server，新默认）** | **0.9609** | **0/13** | 201s |
+
+\* 含首次模型下载，仅量级参考。肉眼比对：原文「珍因撮粹撷华，僭撰此书」high 漏读「撮」「僭」二字，v5 全对；high 另有一条 0.554 的乱码行，v5 无。
+
+**重要发现**：`濒湖脉学.pdf` 是简体横排现代排印本——馆藏为简繁混杂（`中医/` 多新排印本，`古书/` 多繁体刻本扫描）。v5 繁简一体正是为此。**下一步应在 `古书/` 里选一种繁体刻本重跑 `tools/eval_baseline.py` 验证繁体场景**，再开始全量。
+
+### GitHub 调研结论
 
 - GitHub 上**没有**「下载即用、本地 CPU 跑、精度强于 PP-OCRv5」的古籍专用 OCR 引擎。古籍专用高精度只有两种形态：云 API 编排（guji-ocr，¥0.016/页）或自己微调。
 - 古籍 OCR 精度前沿已在**多模态大模型**（EvaHan 2026 基线即 Qwen2.5-VL 微调）。传统检测+识别管线的角色 = 便宜初稿 + 置信度分诊。

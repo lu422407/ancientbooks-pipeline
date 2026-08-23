@@ -2,7 +2,6 @@
 """PDF -> page/leaf images with hashes and provenance."""
 from __future__ import annotations
 
-import io
 from pathlib import Path
 from typing import List, Tuple
 
@@ -11,7 +10,7 @@ import numpy as np
 from PIL import Image
 
 from ancientbook.config import PipelineConfig
-from ancientbook.manifest import LeafRecord, sha256_bytes, sha256_file
+from ancientbook.manifest import LeafRecord, sha256_file
 from ancientbook.models import BBox, Leaf, TextBlock
 
 
@@ -60,8 +59,61 @@ def split_spread(image: Image.Image, split_x: int) -> Tuple[Image.Image, Image.I
     return right, left
 
 
-def leaf_name(book: str, pdf_index: int, side: str) -> str:
-    return f"{book}_ppdf{pdf_index+1:04d}_{side}.png"
+def find_gutter_column(image: Image.Image, gap_ratio: float = 0.25) -> int | None:
+    """跨页中缝检测：降采样后按列墨迹密度在中央带找空白谷底（无需 OCR）。
+
+    与 find_spread_split_column 的区别：数据源是像素而非 OCR 框，
+    可在 ingest 阶段（OCR 之前）使用。
+    返回 None 表示中央带无明显空白谷（多半是"每页单半叶"的扫描格式），
+    此时不应拆页——宁可不拆，不能切字。
+    """
+    scale_w = 1200
+    if image.width > scale_w:
+        small = image.resize((scale_w, max(1, int(image.height * scale_w / image.width))))
+    else:
+        small = image
+    arr = np.asarray(small.convert("L"), dtype=np.float32)
+    ink = (arr < 160).astype(np.float32)
+    density = ink.sum(axis=0)
+    conv = np.convolve(density, np.ones(15), mode="same")
+    w = len(conv)
+    zone = min(gap_ratio, 0.5)
+    lo, hi = int(w * (0.5 - zone)), int(w * (0.5 + zone))
+    if hi - lo < 2:
+        return None
+    seg = conv[lo:hi]
+    ink_ref = float(np.percentile(conv, 90))
+    if ink_ref <= 0:
+        return None
+    thr = 0.25 * ink_ref
+    if float(seg.min()) > thr:
+        return None  # 中央带全是墨（每页单半叶）→ 不拆
+    valley = int(np.argmin(seg)) + lo
+    # 空白带宽度校验：真中缝约占页宽 5%+，普通列间隙仅 ~2-3%
+    l = valley
+    while l > 0 and conv[l - 1] <= thr:
+        l -= 1
+    r = valley
+    while r < w - 1 and conv[r + 1] <= thr:
+        r += 1
+    if (r - l + 1) < int(w * 0.04):
+        return None
+    return int(valley * image.width / w)
+
+
+def leaf_ext(config: PipelineConfig) -> str:
+    return "jpg" if config.image_format == "jpeg" else "png"
+
+
+def save_leaf_image(image: Image.Image, path: Path, config: PipelineConfig) -> None:
+    if config.image_format == "jpeg":
+        image.save(path, "JPEG", quality=config.jpeg_quality)
+    else:
+        image.save(path, "PNG")
+
+
+def leaf_name(book: str, pdf_index: int, side: str, ext: str = "png") -> str:
+    return f"{book}_ppdf{pdf_index+1:04d}_{side}.{ext}"
 
 
 def safe_book_name(name: str) -> str:
@@ -91,27 +143,24 @@ def ingest_pdf(pdf_path: Path, book: str, volume: str, config: PipelineConfig,
 
     for pi in range(n):
         img = render_pdf_page(doc, pi, dpi=config.dpi)
-        img_bytes = io.BytesIO()
-        img.save(img_bytes, format="PNG")
-        img_bytes.seek(0)
-        full_hash = sha256_bytes(img_bytes.read())
-        img_bytes.seek(0)
+        ext = leaf_ext(config)
 
         if config.split_spread:
-            # for split, first get a quick OCR-free center split based on image
-            split_x = img.width // 2
-            right_img, left_img = split_spread(img, split_x)
-            # numbering convention: PDF physical right side is the book's earlier recto page
-            right_path = out_dir / leaf_name(book_safe, pi, "R")
-            left_path = out_dir / leaf_name(book_safe, pi, "L")
-            right_img.save(right_path, "PNG")
-            left_img.save(left_path, "PNG")
-            leaves.append(Leaf(book, pdf_path, pi, "R", pi * 2 + 1, right_path, sha256_file(right_path)))
-            leaves.append(Leaf(book, pdf_path, pi, "L", pi * 2 + 2, left_path, sha256_file(left_path)))
-        else:
-            leaf_path = out_dir / leaf_name(book_safe, pi, "whole")
-            img.save(leaf_path, "PNG")
-            leaves.append(Leaf(book, pdf_path, pi, "whole", pi + 1, leaf_path, sha256_file(leaf_path)))
+            # 基于像素墨迹找中缝空白谷底；找不到（每页单半叶）则整页作一叶，不硬拆
+            gutter = find_gutter_column(img, config.spread_gap_ratio)
+            if gutter is not None:
+                right_img, left_img = split_spread(img, gutter)
+                # numbering convention: PDF physical right side is the book's earlier recto page
+                right_path = out_dir / leaf_name(book_safe, pi, "R", ext)
+                left_path = out_dir / leaf_name(book_safe, pi, "L", ext)
+                save_leaf_image(right_img, right_path, config)
+                save_leaf_image(left_img, left_path, config)
+                leaves.append(Leaf(book, pdf_path, pi, "R", pi * 2 + 1, right_path, sha256_file(right_path)))
+                leaves.append(Leaf(book, pdf_path, pi, "L", pi * 2 + 2, left_path, sha256_file(left_path)))
+                continue
+        leaf_path = out_dir / leaf_name(book_safe, pi, "whole", ext)
+        save_leaf_image(img, leaf_path, config)
+        leaves.append(Leaf(book, pdf_path, pi, "whole", pi + 1, leaf_path, sha256_file(leaf_path)))
 
     doc.close()
     return leaves

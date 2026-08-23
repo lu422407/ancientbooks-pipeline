@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from ancientbook.config import PipelineConfig
 from ancientbook.export import render_markdown
-from ancientbook.ingest import find_spread_split_column, leaf_name, safe_book_name, split_spread
+from ancientbook.ingest import find_gutter_column, find_spread_split_column, leaf_name, safe_book_name, split_spread
 from ancientbook.layout import build_layout, detect_columns, detect_orientation
 from ancientbook.manifest import Manifest, sha256_file
 from ancientbook.models import BBox, BlockType, ReadingDirection, TextBlock
@@ -47,6 +47,26 @@ def test_pdf_split_spread(tmp_project: PipelineConfig):
     right, left = split_spread(img, split_x)
     assert right.width == 900
     assert left.width == 900
+
+
+def test_gutter_detected_on_spread(tmp_project: PipelineConfig):
+    """跨页扫描（两侧有墨、中缝空白）→ 应在中央带找到谷底。"""
+    img = Image.new("RGB", (1800, 1200), (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    draw.rectangle([100, 100, 780, 1100], fill=(0, 0, 0))     # 左叶
+    draw.rectangle([1030, 100, 1700, 1100], fill=(0, 0, 0))   # 右叶
+    gutter = find_gutter_column(img, 0.25)
+    assert gutter is not None
+    assert 770 <= gutter <= 1030  # 落在两块墨之间的空白带
+
+
+def test_gutter_none_on_single_leaf(tmp_project: PipelineConfig):
+    """每页单半叶（中央带全是文字列）→ 不应拆页，返回 None。"""
+    img = Image.new("RGB", (1200, 1800), (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    for x in range(100, 1100, 80):  # 满页竖排文字列
+        draw.rectangle([x, 100, x + 50, 1700], fill=(0, 0, 0))
+    assert find_gutter_column(img, 0.25) is None
 
 
 def test_page_hash(tmp_project: PipelineConfig):

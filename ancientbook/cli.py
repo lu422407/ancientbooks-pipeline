@@ -20,7 +20,7 @@ pass_config = click.make_pass_decorator(PipelineConfig)
 @click.option("--root", type=click.Path(path_type=Path), default=None,
               help="项目根目录，默认 ~/Documents/AncientBooks")
 @click.option("--dpi", type=int, default=None)
-@click.option("--ocr-quality", type=click.Choice(["high", "mobile"]), default=None)
+@click.option("--ocr-quality", type=click.Choice(["v5", "high", "mobile"]), default=None)
 @click.option("--high-priority-threshold", type=float, default=None)
 @click.option("--review-threshold", type=float, default=None)
 @click.option("--commentary-height-ratio", type=float, default=None)

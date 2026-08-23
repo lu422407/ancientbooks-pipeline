@@ -13,7 +13,7 @@ dependencies = [
     "Pillow>=10.0",
     "numpy>=1.24",
     "PyYAML>=6.0",
-    "rapidocr>=3.9",
+    "rapidocr[onnxruntime]>=3.9",
 ]
 
 [project.scripts]
