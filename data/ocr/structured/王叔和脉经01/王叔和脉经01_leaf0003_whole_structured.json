@@ -1,0 +1,59 @@
+{
+  "book": "王叔和脉经01",
+  "leaf": 3,
+  "side": "whole",
+  "pdf_page": 3,
+  "image_file": "H:\\PDFgushu\\ancientbooks-pipeline\\data\\sources\\images\\王叔和脉经01\\王叔和脉经01_ppdf0003_whole.jpg",
+  "image_hash": "21a4163a056dd21c7a7fca2e1e80469dca556710b77976b8115c57b41d28a126",
+  "ocr_engine": "RapidOCR(v5)/rapidocr_ch_server_v5+det_small",
+  "layout": {
+    "orientation": "vertical",
+    "reading_direction": "right_to_left",
+    "column_count": 2,
+    "avg_main_height": 4754.4642333984375,
+    "avg_commentary_height": 310.71435546875,
+    "column_x_centers": [
+      4855.342563205295,
+      8197.983520507812
+    ],
+    "main_text_region": [
+      [
+        1867.1370849609375,
+        1623.21435546875
+      ],
+      [
+        8785.88671875,
+        1623.21435546875
+      ],
+      [
+        8785.88671875,
+        6455.357421875
+      ],
+      [
+        1867.1370849609375,
+        6455.357421875
+      ]
+    ],
+    "annotation_regions": [
+      [
+        [
+          6809.87890625,
+          4644.64306640625
+        ],
+        [
+          6945.96728515625,
+          4644.64306640625
+        ],
+        [
+          6945.96728515625,
+          4955.357421875
+        ],
+        [
+          6809.87890625,
+          4955.357421875
+        ]
+      ]
+    ]
+  },
+  "raw_path": "H:\\PDFgushu\\ancientbooks-pipeline\\data\\ocr\\raw\\王叔和脉经01\\王叔和脉经01_leaf0003_whole_raw.json"
+}

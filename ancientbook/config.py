@@ -66,8 +66,11 @@ class PipelineConfig:
     # minimum block area (px²) to keep
     min_block_area: int = 80
 
+    # OCR 前背景平坦化：去黄底/光照不均，磨损刻本实测 +0.06 conf（可关）
+    preprocess: bool = True
+
     # provenance
-    pipeline_version: str = "0.1.0"
+    pipeline_version: str = "0.2.0"  # 0.2.0: 默认 v5 模型 + 平坦化预处理，触发全量重OCR
 
     def dir(self, name: str) -> Path:
         return self.project_root / DATA_DIRS[name].relative_to(PROJECT_ROOT)

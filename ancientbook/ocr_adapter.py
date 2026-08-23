@@ -9,10 +9,23 @@ from typing import Any, List, Tuple, Union
 import os
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 from ancientbook.config import PipelineConfig
 from ancientbook.models import BBox, TextBlock
+
+
+def _flatten_background(arr: np.ndarray) -> np.ndarray:
+    """背景平坦化：除以模糊背景估计，去除扫描件黄底/光照不均。
+
+    磨损刻本实测（王叔和脉经 叶2）：mean_conf 0.801→0.862，
+    标题行「旅经序#酒#」修正为「脈经序」，找回一个漏字「於」。
+    """
+    g = Image.fromarray(arr).convert("L")
+    bg = np.asarray(g.filter(ImageFilter.GaussianBlur(25)), dtype=np.float32)
+    ink = np.asarray(g, dtype=np.float32)
+    norm = np.clip(ink / np.maximum(bg, 30.0) * 200.0, 0, 255).astype(np.uint8)
+    return np.stack([norm] * 3, axis=-1)
 
 
 class OCREngine(ABC):
@@ -97,6 +110,8 @@ class RapidOCREngine(OCREngine):
             elif arr.shape[-1] == 4:
                 arr = arr[..., :3]
 
+        if getattr(self.config, "preprocess", False):
+            arr = _flatten_background(arr)
         res = self._engine(arr)
         boxes, txts, scores = self._unpack(res)
         if boxes is None:

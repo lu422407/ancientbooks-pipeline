@@ -24,8 +24,9 @@ pass_config = click.make_pass_decorator(PipelineConfig)
 @click.option("--high-priority-threshold", type=float, default=None)
 @click.option("--review-threshold", type=float, default=None)
 @click.option("--commentary-height-ratio", type=float, default=None)
+@click.option("--preprocess/--no-preprocess", default=None, help="OCR 前背景平坦化（默认开）")
 @click.pass_context
-def main(ctx, root, dpi, ocr_quality, high_priority_threshold, review_threshold, commentary_height_ratio):
+def main(ctx, root, dpi, ocr_quality, high_priority_threshold, review_threshold, commentary_height_ratio, preprocess):
     """AncientBooks PDF -> Obsidian Knowledge Pipeline CLI."""
     cfg = PipelineConfig()
     if root:
@@ -40,6 +41,8 @@ def main(ctx, root, dpi, ocr_quality, high_priority_threshold, review_threshold,
         cfg.review_threshold = review_threshold
     if commentary_height_ratio is not None:
         cfg.commentary_height_ratio = commentary_height_ratio
+    if preprocess is not None:
+        cfg.preprocess = preprocess
     ensure_dirs()
     ctx.obj = cfg
 

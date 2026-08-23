@@ -13,6 +13,7 @@ from ancientbook.ingest import find_gutter_column, find_spread_split_column, lea
 from ancientbook.layout import build_layout, detect_columns, detect_orientation
 from ancientbook.manifest import Manifest, sha256_file
 from ancientbook.models import BBox, BlockType, ReadingDirection, TextBlock
+from ancientbook.ocr_adapter import _flatten_background
 from ancientbook.pipeline import run_ingest, run_ocr
 from ancientbook.review import generate_review_queue, priority_label
 from ancientbook.structure import classify_and_order, reconstruct_reading_order
@@ -67,6 +68,18 @@ def test_gutter_none_on_single_leaf(tmp_project: PipelineConfig):
     for x in range(100, 1100, 80):  # 满页竖排文字列
         draw.rectangle([x, 100, x + 50, 1700], fill=(0, 0, 0))
     assert find_gutter_column(img, 0.25) is None
+
+
+def test_flatten_background(tmp_project: PipelineConfig):
+    """平坦化：形状/类型不变，暗底图被提亮到白底。"""
+    arr = np.full((60, 80, 3), 120, dtype=np.uint8)  # 灰底
+    out = _flatten_background(arr)
+    assert out.shape == arr.shape and out.dtype == np.uint8
+    assert out.mean() > 180  # 灰底被拉回接近白
+    dark = np.zeros((60, 80, 3), dtype=np.uint8)
+    dark[20:40, 30:50] = 255  # 黑底白块
+    out2 = _flatten_background(dark)
+    assert out2.shape == dark.shape
 
 
 def test_page_hash(tmp_project: PipelineConfig):
