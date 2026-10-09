@@ -106,6 +106,23 @@ class Manifest:
     def all(self) -> Dict[str, LeafRecord]:
         return dict(self.records)
 
+    def remove(self, book: str, leaf: int, side: str) -> None:
+        self.records.pop(self._key(book, leaf, side), None)
+
+    def purge_book_pages(self, book: str, pdf_pages: set) -> int:
+        """删除某书指定 PDF 页的旧记录（重跑 ingest 后清理过期叶）。
+
+        同一 PDF 页重新 ingest 后可能由 whole 变为 R/L（或相反），
+        旧的 side 记录若不清除会与新的共用叶号，导致导出互相覆盖。
+        """
+        stale = [k for k, r in self.records.items()
+                 if r.book == book and r.pdf_page in pdf_pages]
+        for k in stale:
+            del self.records[k]
+        if stale:
+            self.save()
+        return len(stale)
+
 
 def get_manifest(config: Optional[PipelineConfig] = None) -> Manifest:
     cfg = config or PipelineConfig()

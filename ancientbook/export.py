@@ -72,7 +72,8 @@ def render_markdown(transcription: PageTranscription, image_rel: Path, pdf_rel: 
 def export_leaf(transcription: PageTranscription, config: PipelineConfig) -> Path:
     out_dir = config.dir("transcription") / transcription.book
     out_dir.mkdir(parents=True, exist_ok=True)
-    md_path = out_dir / f"{transcription.book}_leaf{transcription.leaf:04d}.md"
+    # 文件名含 side：同书重跑 ingest 后叶号可能复用（whole→R/L），不带 side 会互相覆盖
+    md_path = out_dir / f"{transcription.book}_leaf{transcription.leaf:04d}_{transcription.side}.md"
 
     image_rel = transcription.image_file.relative_to(config.project_root)
     # PDF 路径已存于 manifest 与 structured OCR JSON；markdown 中只显示书名作为来源

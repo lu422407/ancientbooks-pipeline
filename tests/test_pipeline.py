@@ -9,7 +9,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 from ancientbook.config import PipelineConfig
 from ancientbook.export import render_markdown
-from ancientbook.ingest import find_gutter_column, find_spread_split_column, leaf_name, safe_book_name, split_spread
+from ancientbook.ingest import (crop_archive_photo, find_gutter_column, find_spread_split_column,
+                                leaf_name, safe_book_name, split_spread)
 from ancientbook.layout import build_layout, detect_columns, detect_orientation
 from ancientbook.manifest import Manifest, sha256_file
 from ancientbook.models import BBox, BlockType, ReadingDirection, TextBlock
@@ -38,16 +39,18 @@ def _make_blocks_vertical(texts_by_column):
 
 
 def test_pdf_split_spread(tmp_project: PipelineConfig):
+    """拆跨页：返回 (右半, 左半)，右半是物理右侧（竖排书阅读顺序靠前）。"""
     img = Image.new("RGB", (1800, 1200), (255, 255, 255))
     draw = ImageDraw.Draw(img)
-    # left page text
-    draw.rectangle([100, 100, 400, 1000], fill=(0, 0, 0))
-    # right page text
-    draw.rectangle([1300, 100, 1600, 1000], fill=(0, 0, 0))
-    split_x = img.width // 2
-    right, left = split_spread(img, split_x)
-    assert right.width == 900
-    assert left.width == 900
+    draw.rectangle([100, 100, 400, 1000], fill=(0, 0, 0))     # 物理左
+    draw.rectangle([1300, 100, 1600, 1000], fill=(0, 0, 0))   # 物理右
+    right, left = split_spread(img, 900)
+    assert right.width == 900 and left.width == 900
+    # 右半应含物理右侧墨块（原图 x=1300 → 右半局部 x=400）
+    assert np.asarray(right.convert("L"))[500, 400] < 100
+    # 左半应含物理左侧墨块（原图 x=100 → 左半局部 x=100），且局部 x=400 处为空白
+    assert np.asarray(left.convert("L"))[500, 100] < 100
+    assert np.asarray(left.convert("L"))[500, 700] > 200
 
 
 def test_gutter_detected_on_spread(tmp_project: PipelineConfig):
@@ -68,6 +71,20 @@ def test_gutter_none_on_single_leaf(tmp_project: PipelineConfig):
     for x in range(100, 1100, 80):  # 满页竖排文字列
         draw.rectangle([x, 100, x + 50, 1700], fill=(0, 0, 0))
     assert find_gutter_column(img, 0.25) is None
+
+
+def test_crop_archive_photo(tmp_project: PipelineConfig):
+    """档案摄影（灰底+居中书页）→ 裁到书页；普通满幅扫描 → 原样返回。"""
+    img = Image.new("RGB", (1000, 800), (100, 100, 100))  # 灰背景
+    draw = ImageDraw.Draw(img)
+    draw.rectangle([200, 100, 800, 700], fill=(230, 225, 200))  # 书页
+    cropped = crop_archive_photo(img)
+    assert cropped.width < img.width and cropped.height < img.height
+    assert abs(cropped.width - 600) < 40 and abs(cropped.height - 600) < 40
+    # 满幅扫描件（无灰背景）→ 不裁
+    flat = Image.new("RGB", (1000, 800), (240, 235, 220))
+    ImageDraw.Draw(flat).rectangle([100, 100, 900, 700], fill=(20, 20, 20))
+    assert crop_archive_photo(flat).size == flat.size
 
 
 def test_flatten_background(tmp_project: PipelineConfig):

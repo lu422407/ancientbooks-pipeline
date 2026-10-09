@@ -23,6 +23,10 @@ from ancientbook.structure import classify_and_order
 def run_ingest(pdf_path: Path, book: str, volume: str, config: PipelineConfig,
                limit_pages: int = 0, manifest: Optional[Manifest] = None) -> List[Leaf]:
     leaves = ingest_pdf(pdf_path, book, volume, config, limit_pages)
+    if manifest is not None:
+        # 同一 PDF 页重新 ingest 后拆页方式可能变化（whole↔R/L），
+        # 先清掉这些页的旧记录，避免新旧叶号复用导致导出互相覆盖
+        manifest.purge_book_pages(book, {l.pdf_index + 1 for l in leaves})
     engine_label = f"{config.ocr_engine}-{config.ocr_quality}"
     update_manifest_from_leaves(leaves, config, volume=volume,
                                 ocr_engine=config.ocr_engine,

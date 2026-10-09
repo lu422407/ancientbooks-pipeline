@@ -24,9 +24,38 @@ def _pil_from_pixmap(pix) -> Image.Image:
     return img
 
 
-def render_pdf_page(doc: fitz.Document, page_index: int, dpi: int = 200) -> Image.Image:
+def native_dpi(doc: fitz.Document, page_index: int) -> float | None:
+    """估算页面内嵌图像的等效原生 DPI（扫描件常见声明尺寸虚高）。
+
+    例：《王叔和脉经》页声明 36×24 英寸，内嵌图仅 2592×1728 → 等效 72 DPI。
+    此时按 300 DPI 渲染等于放大 4 倍（无新信息、白烧 CPU）。
+    """
+    try:
+        page = doc[page_index]
+        images = page.get_images(full=True)
+        if not images:
+            return None
+        best = 0
+        for im in images:
+            try:
+                info = doc.extract_image(im[0])
+                best = max(best, int(info.get("width", 0)))
+            except Exception:
+                continue
+        if best <= 0:
+            return None
+        page_w_in = page.rect.width / 72.0
+        return best / page_w_in if page_w_in > 0 else None
+    except Exception:
+        return None
+
+
+def render_pdf_page(doc: fitz.Document, page_index: int, dpi: int = 300) -> Image.Image:
+    """渲染页面，但不放大超过内嵌图像的原生分辨率。"""
     page = doc[page_index]
-    pix = page.get_pixmap(dpi=dpi)
+    eff = native_dpi(doc, page_index)
+    use_dpi = dpi if eff is None else min(dpi, int(round(eff)))
+    pix = page.get_pixmap(dpi=use_dpi)
     return _pil_from_pixmap(pix)
 
 
@@ -54,8 +83,13 @@ def find_spread_split_column(image: Image.Image, blocks: List[TextBlock], gap_ra
 
 
 def split_spread(image: Image.Image, split_x: int) -> Tuple[Image.Image, Image.Image]:
-    right = image.crop((0, 0, split_x, image.height))
-    left = image.crop((split_x, 0, image.width, image.height))
+    """拆跨页为 (右半, 左半)。
+
+    中文/日文竖排书右起阅读，物理右页在阅读顺序中靠前（recto），左页靠后。
+    故返回的"右半"是图像 x∈[split_x, width) 部分。
+    """
+    left = image.crop((0, 0, split_x, image.height))
+    right = image.crop((split_x, 0, image.width, image.height))
     return right, left
 
 
@@ -73,7 +107,11 @@ def find_gutter_column(image: Image.Image, gap_ratio: float = 0.25) -> int | Non
     else:
         small = image
     arr = np.asarray(small.convert("L"), dtype=np.float32)
-    ink = (arr < 160).astype(np.float32)
+    # 相对阈值：以纸张亮度（P90）为基准，避免把灰背景板/阴影当成墨
+    paper = float(np.percentile(arr, 90))
+    if paper <= 0:
+        return None
+    ink = (arr < 0.62 * paper).astype(np.float32)
     density = ink.sum(axis=0)
     conv = np.convolve(density, np.ones(15), mode="same")
     w = len(conv)
@@ -101,9 +139,43 @@ def find_gutter_column(image: Image.Image, gap_ratio: float = 0.25) -> int | Non
     return int(valley * image.width / w)
 
 
+def crop_archive_photo(image: Image.Image, min_frac: float = 0.35) -> Image.Image:
+    """裁掉文物级档案摄影的背景（灰底/色卡/标尺），只留书页。
+
+    此类图特征：书页纸张明显亮于四周灰色背景板。以边缘像素估背景亮度，
+    用"明显亮于背景"的像素定位书页包围盒。
+    检测区域过小或几乎满幅时判定不是档案摄影，原图返回。
+    """
+    arr = np.asarray(image.convert("L"), dtype=np.float32)
+    h, w = arr.shape
+    if h < 16 or w < 16:
+        return image
+    band = max(2, min(h, w) // 40)
+    border = np.concatenate([
+        arr[:band].ravel(), arr[-band:].ravel(),
+        arr[:, :band].ravel(), arr[:, -band:].ravel(),
+    ])
+    bg = float(np.median(border))
+    paper = float(np.percentile(arr, 90))
+    # 背景与纸张亮度差异不明显 → 不是档案摄影（普通扫描件）
+    if bg <= 0 or paper < 1.25 * bg:
+        return image
+    thresh = bg + 0.45 * (paper - bg)
+    mask = arr > thresh
+    xs = np.where(mask.mean(axis=0) > 0.20)[0]
+    ys = np.where(mask.mean(axis=1) > 0.20)[0]
+    if len(xs) < 2 or len(ys) < 2:
+        return image
+    x0, x1, y0, y1 = int(xs[0]), int(xs[-1]), int(ys[0]), int(ys[-1])
+    if (x1 - x0) < min_frac * w or (y1 - y0) < min_frac * h:
+        return image
+    if (x1 - x0) > 0.985 * w and (y1 - y0) > 0.985 * h:
+        return image  # 几乎没有可裁的边
+    return image.crop((x0, y0, x1 + 1, y1 + 1))
+
+
 def leaf_ext(config: PipelineConfig) -> str:
     return "jpg" if config.image_format == "jpeg" else "png"
-
 
 def save_leaf_image(image: Image.Image, path: Path, config: PipelineConfig) -> None:
     if config.image_format == "jpeg":
@@ -144,6 +216,8 @@ def ingest_pdf(pdf_path: Path, book: str, volume: str, config: PipelineConfig,
     for pi in range(n):
         img = render_pdf_page(doc, pi, dpi=config.dpi)
         ext = leaf_ext(config)
+        # 文物档案摄影：先裁掉灰底/色卡/标尺，只留书页
+        img = crop_archive_photo(img)
 
         if config.split_spread:
             # 基于像素墨迹找中缝空白谷底；找不到（每页单半叶）则整页作一叶，不硬拆
@@ -160,7 +234,8 @@ def ingest_pdf(pdf_path: Path, book: str, volume: str, config: PipelineConfig,
                 continue
         leaf_path = out_dir / leaf_name(book_safe, pi, "whole", ext)
         save_leaf_image(img, leaf_path, config)
-        leaves.append(Leaf(book, pdf_path, pi, "whole", pi + 1, leaf_path, sha256_file(leaf_path)))
+        # 整页也占该 PDF 页的两个叶号槽中的第一个，避免与相邻页拆页的叶号冲突
+        leaves.append(Leaf(book, pdf_path, pi, "whole", pi * 2 + 1, leaf_path, sha256_file(leaf_path)))
 
     doc.close()
     return leaves

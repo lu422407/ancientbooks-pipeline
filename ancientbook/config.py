@@ -70,7 +70,7 @@ class PipelineConfig:
     preprocess: bool = True
 
     # provenance
-    pipeline_version: str = "0.2.0"  # 0.2.0: 默认 v5 模型 + 平坦化预处理，触发全量重OCR
+    pipeline_version: str = "0.3.0"  # 0.3.0: 原生DPI/档案裁切/阅读顺序/叶号修复
 
     def dir(self, name: str) -> Path:
         return self.project_root / DATA_DIRS[name].relative_to(PROJECT_ROOT)
